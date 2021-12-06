@@ -86,7 +86,7 @@ def receivingDateLoop():
                 runningNumber = runningNumber + 1
 
                 #print(humidity)
-                if runningNumber >= 9:
+                if runningNumber >= 300:
                     safeSQL(connectionSQL)
                     evaluateData()
                     sendDataMail()
@@ -95,8 +95,10 @@ def receivingDateLoop():
 
         except gaierror:
             print("Connection to Email-Service lost.")
-        except:
-            print("Arduino lost.")
+        except Exception as e:
+            ser = serial.Serial('COM5', 9600)
+            time.sleep(2)
+            print(str(e))
 
 
 
