@@ -62,7 +62,7 @@ def receivingDateLoop():
     time.sleep(2)
     runningNumber = 0
     SQLHandlerObject = SQLHandler.SQLHandler()
-    schedule.every(20).seconds.do(scheduleTask, sqlHandler = SQLHandlerObject)
+    schedule.every(2).minutes.do(scheduleTask, sqlHandler = SQLHandlerObject)
     connectionSQL = SQLHandlerObject.getSQL()
     cursor = connectionSQL.cursor()
 
@@ -98,6 +98,7 @@ def receivingDateLoop():
                 schedule.run_pending()
                 connectionSQL = SQLHandlerObject.getSQL()
                 cursor = connectionSQL.cursor()
+                print("SQL saved")
                 #connectionSQL, cursor, last_entry = openSQL()
                 #if runningNumber%30==0:
                 #    test(connectionSQL, cursor)
