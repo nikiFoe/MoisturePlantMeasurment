@@ -9,6 +9,7 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 from socket import gethostbyname, gaierror
+import SQLHandler
 
 import numpy as np
 import pandas as pd
@@ -17,32 +18,42 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import serial
 
+import schedule
+from threading import Thread
+
+
+
+def do_something(number, sql):
+    sql.close()
+    print("do" + str(number))
+    evaluateData()
+    sendDataMail()
+
+
 def openSQL():
-    connectionSQL = sqlite3.connect("humidity.db")
+    connectionSQL = sqlite3.connect("moisture.db")
     cursor = connectionSQL.cursor()
     try:
-        cursor.execute("""DROP TABLE humid;""")
-    except:
-        print("Table not existing")
-    #sql_command = """
-    #    CREATE TABLE humid (
-    #    _number INTEGER PRIMARY KEY,
-    #    _time DATE,
-    #    _humidity INTEGER);"""
+        sql_command = """
+                                        CREATE TABLE moist ( 
+                                        _number INTEGER PRIMARY KEY,
+                                        _time DATE,
+                                        _sensor varchar(255), 
+                                        _humidity INTEGER);"""
 
-    sql_command = """
-        CREATE TABLE humid ( 
-        _number INTEGER PRIMARY KEY,
-        _time DATE,
-        _sensor varchar(255), 
-        _humidity INTEGER);"""
+        cursor.execute(sql_command)
+    except sqlite3.OperationalError:
+        print("Table already existing")
+        sql_command = """DELETE FROM moist"""
+        cursor.execute(sql_command)
 
-    cursor.execute(sql_command)
-    return connectionSQL, cursor
+    #statement = "SELECT _number AS names FROM moist ORDER BY _number DESC LIMIT 1"
+    #element = cursor.execute(statement)
+    lastEntry = 0 #element.fetchone()[0]
+    return connectionSQL, cursor, lastEntry
 
 def safeSQL(conSQL):
     conSQL.commit()
-    conSQL.close()
 
 
 def receivingDateLoop():
@@ -50,97 +61,118 @@ def receivingDateLoop():
     ser = serial.Serial('COM5', 9600)
     time.sleep(2)
     runningNumber = 0
+    SQLHandlerObject = SQLHandler.SQLHandler()
+    schedule.every(2).minutes.do(scheduleTask, sqlHandler = SQLHandlerObject)
+    connectionSQL = SQLHandlerObject.getSQL()
+    cursor = connectionSQL.cursor()
 
+    #schedule.every(2).minutes.do(do_something, number = runningNumber, sql = connectionSQL)
 
-
-    #connectionSQL = sqlite3.connect("humidity.db")
-    #cursor = connectionSQL.cursor()
-    #shouldRun = True
-    #cursor.execute("""DROP TABLE humid;""")
-
-    #sql_command = """
-    #CREATE TABLE humid (
-    #_number INTEGER PRIMARY KEY,
-    #_time DATE,
-    #_humidity INTEGER);"""
-
-    #cursor.execute(sql_command)
-
-
-    connectionSQL, cursor = openSQL()
     runningNumber = runningNumber + 1
     while True:
-        try:
-            line = ser.readline()  # read a byte
-            if line:
-                times = datetime.now().strftime('%d.%m-%H:%M:%S')
-                string = line.decode()  # convert the byte string to a unicode string
-                humidity = int(string[3:])  # convert the unicode string to an int
-                sensor = string[0:2]
-
-                format_str = """INSERT INTO humid (_number, _time, _sensor, _humidity)
+        #try:
+        line = ser.readline()  # read a byte
+        if line:
+            times = datetime.now().strftime('%d.%m-%H:%M:%S')
+            string = line.decode()  # convert the byte string to a unicode string
+            humidity = int(string[3:])  # convert the unicode string to an int
+            sensor = string[0:2]
+            format_str_v1 = """INSERT INTO moist """
+            format_str_v2 = """(_number, _time, _sensor, _humidity) 
                             VALUES ("{_number}", "{_time}", "{_sensor}","{_humidity}");"""
 
-                sql_command = format_str.format(_number = runningNumber,  _time = times, _sensor = sensor, _humidity = humidity)
-                cursor.execute(sql_command)
-                runningNumber = runningNumber + 1
 
-                #print(humidity)
-                if runningNumber >= 300:
-                    safeSQL(connectionSQL)
-                    evaluateData()
-                    sendDataMail()
-                    connectionSQL, cursor = openSQL()
-                    runningNumber = 1
 
-        except gaierror:
+            sql_command = format_str_v2.format(_number = runningNumber,  _time = times, _sensor = sensor, _humidity = humidity)
+            cursor.execute(format_str_v1 + sql_command)
+            runningNumber = runningNumber + 1
+
+
+            #print(humidity)
+            if runningNumber%10 == 0:
+                time.sleep(1)
+                #safeSQL(connectionSQL)
+                SQLHandlerObject.setSQL(connectionSQL)
+                SQLHandlerObject.safeSQL()
+                #connectionSQL.close()
+                schedule.run_pending()
+                connectionSQL = SQLHandlerObject.getSQL()
+                cursor = connectionSQL.cursor()
+                print("SQL saved")
+                #connectionSQL, cursor, last_entry = openSQL()
+                #if runningNumber%30==0:
+                #    test(connectionSQL, cursor)
+                #evaluateData()
+                #sendDataMail()
+
+                #runningNumber = runningNumber + 1
+
+
+        """except gaierror:
             print("Connection to Email-Service lost.")
         except Exception as e:
-            ser = serial.Serial('COM5', 9600)
-            time.sleep(2)
+            #ser = serial.Serial('COM5', 9600)
+            #time.sleep(2)
             print(str(e))
+            print("SEL")"""
 
+def scheduleTask(sqlHandler):
+    evaluateData(sqlHandler)
+    sendDataMail()
+    connectedSQL, cursor = sqlHandler.loadSQL()
+    sqlHandler.connectionSQL = connectedSQL
+    sqlHandler.cursor = cursor
 
-
-def evaluateData():
-    con = sqlite3.connect("humidity.db")
-    cursor = con.cursor()
+def evaluateData(sqlHandler):
+    sqlFile = sqlHandler.getSQL()
+    cursor = sqlFile.cursor()
+    #connectionSQL = sqlite3.connect("moisture.db")
+    #cursor = connectionSQL.cursor()
     #con = pyodbc.connect("humidity.db")
     query = """SELECT _number, 
                 _time,
                 _sensor,
                 _humidity
-               FROM humid;"""
+               FROM moist;"""
     a = cursor.execute(query)
-    TM = pd.read_sql(query, con)
 
-    TM1 = TM.head(100)
+
+
+
+    TM1 = pd.read_sql(query, sqlFile)
+
+    #TM1 = TM.head(100)
 
     s1Index = []
     s2Index = []
     s3Index = []
-    sxAxes = []
+    sx1Axes = []
+    sx2Axes = []
+    sx3Axes = []
 
     count = 0
     for count, item in enumerate(TM1['_sensor'].str.findall('s1'), start = 0):
         if item:
             s1Index.append(TM1['_humidity'][count])
-            sxAxes.append(TM1['_time'][count])
+            sx1Axes.append(TM1['_time'][count])
 
     count = 0
     for count, item in enumerate(TM1['_sensor'].str.findall('s2'), start = 0):
         if item:
             s2Index.append(TM1['_humidity'][count])
+            sx2Axes.append(TM1['_time'][count])
 
     count = 0
     for count, item in enumerate(TM1['_sensor'].str.findall('s3'), start = 0):
         if item:
             s3Index.append(TM1['_humidity'][count])
+            sx3Axes.append(TM1['_time'][count])
 
-
-    plt.scatter(sxAxes[0:len(s1Index)], s1Index)
-    plt.scatter(sxAxes[0:len(s2Index)], s2Index)
-    plt.scatter(sxAxes[0:len(s3Index)], s3Index)
+    print(sx1Axes)
+    print(s2Index)
+    plt.scatter(sx1Axes[:len(s1Index)], s1Index)
+    plt.scatter(sx2Axes[:len(s2Index)], s2Index)
+    plt.scatter(sx3Axes[:len(s3Index)], s3Index)
     #plt.scatter( TM1['_number'], TM1['_humidity'])
     plt.xlabel("Timer", fontsize = 16)
     plt.ylabel("Moisture Value", fontsize = 16)
@@ -149,6 +181,8 @@ def evaluateData():
     plt.tight_layout()
     plt.savefig("Moisture.jpg")
     plt.close()
+
+
 
 def sendDataMail():
     mail_content = '''Hello'''
