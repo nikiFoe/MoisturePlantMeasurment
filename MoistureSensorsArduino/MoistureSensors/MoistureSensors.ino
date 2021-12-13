@@ -17,5 +17,5 @@ stringin3 = "s3:";
 Serial.println(stringin1 + val1); //print the value to serial port
 Serial.println(stringin2 + val2);
 Serial.println(stringin3 + val3);
-delay(1000*6);
+delay(1000*20);
 }

@@ -62,7 +62,7 @@ def receivingDateLoop():
     time.sleep(2)
     runningNumber = 0
     SQLHandlerObject = SQLHandler.SQLHandler()
-    schedule.every(2).minutes.do(scheduleTask, sqlHandler = SQLHandlerObject)
+    schedule.every(30).minutes.do(scheduleTask, sqlHandler = SQLHandlerObject)
     connectionSQL = SQLHandlerObject.getSQL()
     cursor = connectionSQL.cursor()
 
@@ -70,51 +70,45 @@ def receivingDateLoop():
 
     runningNumber = runningNumber + 1
     while True:
-        #try:
-        line = ser.readline()  # read a byte
-        if line:
-            times = datetime.now().strftime('%d.%m-%H:%M:%S')
-            string = line.decode()  # convert the byte string to a unicode string
-            humidity = int(string[3:])  # convert the unicode string to an int
-            sensor = string[0:2]
-            format_str_v1 = """INSERT INTO moist """
-            format_str_v2 = """(_number, _time, _sensor, _humidity) 
-                            VALUES ("{_number}", "{_time}", "{_sensor}","{_humidity}");"""
+        try:
+            line = ser.readline()  # read a byte
+            if line:
+                times = datetime.now().strftime('%d.%m-%H:%M:%S')
+                string = line.decode()  # convert the byte string to a unicode string
+                humidity = int(string[3:])  # convert the unicode string to an int
+                sensor = string[0:2]
+                format_str_v1 = """INSERT INTO moist """
+                format_str_v2 = """(_number, _time, _sensor, _humidity) 
+                                VALUES ("{_number}", "{_time}", "{_sensor}","{_humidity}");"""
 
 
 
-            sql_command = format_str_v2.format(_number = runningNumber,  _time = times, _sensor = sensor, _humidity = humidity)
-            cursor.execute(format_str_v1 + sql_command)
-            runningNumber = runningNumber + 1
+                sql_command = format_str_v2.format(_number = runningNumber,  _time = times, _sensor = sensor, _humidity = humidity)
+                cursor.execute(format_str_v1 + sql_command)
+                runningNumber = runningNumber + 1
 
 
-            #print(humidity)
-            if runningNumber%10 == 0:
-                time.sleep(1)
-                #safeSQL(connectionSQL)
-                SQLHandlerObject.setSQL(connectionSQL)
-                SQLHandlerObject.safeSQL()
-                #connectionSQL.close()
-                schedule.run_pending()
-                connectionSQL = SQLHandlerObject.getSQL()
-                cursor = connectionSQL.cursor()
-                print("SQL saved")
-                #connectionSQL, cursor, last_entry = openSQL()
-                #if runningNumber%30==0:
-                #    test(connectionSQL, cursor)
-                #evaluateData()
-                #sendDataMail()
-
-                #runningNumber = runningNumber + 1
+                #print(humidity)
+                if runningNumber%10 == 0:
+                    time.sleep(1)
+                    #safeSQL(connectionSQL)
+                    SQLHandlerObject.setSQL(connectionSQL)
+                    SQLHandlerObject.safeSQL()
+                    #connectionSQL.close()
+                    schedule.run_pending()
+                    connectionSQL = SQLHandlerObject.getSQL()
+                    cursor = connectionSQL.cursor()
+                    print("SQL saved")
 
 
-        """except gaierror:
+
+        except gaierror:
             print("Connection to Email-Service lost.")
         except Exception as e:
             #ser = serial.Serial('COM5', 9600)
             #time.sleep(2)
             print(str(e))
-            print("SEL")"""
+            print("SEL")
 
 def scheduleTask(sqlHandler):
     evaluateData(sqlHandler)

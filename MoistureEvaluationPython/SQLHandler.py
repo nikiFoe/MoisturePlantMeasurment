@@ -42,7 +42,4 @@ class SQLHandler:
 
     def deleteTable(self):
         pass
-<<<<<<< HEAD
-=======
 
->>>>>>> SQLFix
