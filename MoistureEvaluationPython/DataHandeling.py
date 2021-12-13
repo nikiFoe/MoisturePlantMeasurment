@@ -79,7 +79,7 @@ def receivingDateLoop():
         try:
             line = ser.readline()  # read a byte
             if line:
-                times = datetime.now().strftime('%d.%m-%H:%M:%S')
+                times = datetime.now().strftime('%d-%H:%M')    #'%d.%m-%H:%M:%S')
                 string = line.decode()  # convert the byte string to a unicode string
                 humidity = int(string[3:])  # convert the unicode string to an int
                 sensor = string[0:2]
@@ -199,15 +199,20 @@ def evaluateData(sqlHandler, table, filename):
 
     print(sx1Axes)
     print(s2Index)
-    plt.scatter(sx1Axes[:len(s1Index)], s1Index)
+    scatterplot = plt.scatter(sx1Axes[:len(s1Index)], s1Index)
+    ax = plt.gca()
     plt.scatter(sx2Axes[:len(s2Index)], s2Index)
     plt.scatter(sx3Axes[:len(s3Index)], s3Index)
     #plt.scatter( TM1['_number'], TM1['_humidity'])
-    plt.xlabel("Timer", fontsize = 16)
+    plt.xlabel("Date", fontsize = 16)
     plt.ylabel("Moisture Value", fontsize = 16)
     plt.title("Moisture", fontsize = 25)
     plt.xticks(rotation = 45)
     plt.tight_layout()
+    plt.setp(ax.get_xticklabels()[::2], visible = False)
+    plt.grid()
+    ax.set_ylim([300, 500])
+    plt.legend(["s1", "s2", "s3"])
     plt.savefig("{}.jpg".format(filename))
     plt.close()
 
@@ -246,9 +251,10 @@ def sendDataMail(filename):
 
 
 if __name__ == "__main__":
-    receivingDateLoop()
-    #sendDataMail()
-    #evaluateData()
-    #readSerialport()
+    #receivingDateLoop()
+    weeklySQL = sqlite3.connect("weeklySQL.db")
+    weeklyCursor = weeklySQL.cursor()
+    evaluateData(weeklySQL, "weekly", "weekly")
+
 
 
