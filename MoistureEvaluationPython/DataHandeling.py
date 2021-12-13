@@ -58,13 +58,19 @@ def safeSQL(conSQL):
 
 def receivingDateLoop():
     #ser = serial.Serial('/dev/ttyACM0', 9600)
-    ser = serial.Serial('COM5', 9600)
+    serialString = "COM5"
+    serialNumber = 9600
+    ser = serial.Serial(serialString, serialNumber)
     time.sleep(2)
     runningNumber = 0
     SQLHandlerObject = SQLHandler.SQLHandler()
-    schedule.every(30).minutes.do(scheduleTask, sqlHandler = SQLHandlerObject)
+    schedule.every(2).minutes.do(scheduleTask, sqlHandler = SQLHandlerObject)
+    schedule.every(10).minutes.do(scheduleTaskWeekly, sqlHandler = SQLHandlerObject)
     connectionSQL = SQLHandlerObject.getSQL()
     cursor = connectionSQL.cursor()
+
+    weeklySQL = SQLHandlerObject.getWeeklySQL()
+    weeklyCursor = weeklySQL.cursor()
 
     #schedule.every(2).minutes.do(do_something, number = runningNumber, sql = connectionSQL)
 
@@ -78,13 +84,16 @@ def receivingDateLoop():
                 humidity = int(string[3:])  # convert the unicode string to an int
                 sensor = string[0:2]
                 format_str_v1 = """INSERT INTO moist """
+                format_str_v3 = """INSERT INTO weekly """
                 format_str_v2 = """(_number, _time, _sensor, _humidity) 
                                 VALUES ("{_number}", "{_time}", "{_sensor}","{_humidity}");"""
 
 
 
                 sql_command = format_str_v2.format(_number = runningNumber,  _time = times, _sensor = sensor, _humidity = humidity)
+
                 cursor.execute(format_str_v1 + sql_command)
+                weeklyCursor.execute(format_str_v3 + sql_command)
                 runningNumber = runningNumber + 1
 
 
@@ -94,31 +103,57 @@ def receivingDateLoop():
                     #safeSQL(connectionSQL)
                     SQLHandlerObject.setSQL(connectionSQL)
                     SQLHandlerObject.safeSQL()
+                    SQLHandlerObject.setWeeklySQL(weeklySQL)
+                    SQLHandlerObject.safeWeeklySQL()
                     #connectionSQL.close()
                     schedule.run_pending()
                     connectionSQL = SQLHandlerObject.getSQL()
+                    weeklySQL = SQLHandlerObject.getWeeklySQL()
+                    weeklyCursor = weeklySQL.cursor()
                     cursor = connectionSQL.cursor()
                     print("SQL saved")
 
 
 
-        except gaierror:
-            print("Connection to Email-Service lost.")
-        except Exception as e:
+        except gaierror as e:
+            print("Connection to Email-Service lost: " + str(e))
+        except serial.serialutil.SerialException as e:
+            print(str(e))
+            serialConnected = False
+            while not serialConnected:
+                time.sleep(1)
+                try:
+                    ser = serial.Serial('COM5', serialNumber)
+                    serialConnected = True
+                    print("Reconnecting succeeded.")
+                except:
+                    print("Reconnection failed.")
+
+
+        """except Exception as e:
             #ser = serial.Serial('COM5', 9600)
             #time.sleep(2)
             print(str(e))
-            print("SEL")
+            print("SEL")"""
 
 def scheduleTask(sqlHandler):
-    evaluateData(sqlHandler)
-    sendDataMail()
+    sql = sqlHandler.getSQL()
+    evaluateData(sql, "moist", "daily")
+    sendDataMail("daily")
     connectedSQL, cursor = sqlHandler.loadSQL()
     sqlHandler.connectionSQL = connectedSQL
     sqlHandler.cursor = cursor
 
-def evaluateData(sqlHandler):
-    sqlFile = sqlHandler.getSQL()
+def scheduleTaskWeekly(sqlHandler):
+    sql = sqlHandler.getWeeklySQL()
+    evaluateData(sql, "weekly", "weekly")
+    sendDataMail("weekly")
+    connectedSQL, cursor = sqlHandler.loadWeeklySQL()
+    sqlHandler.weeklySQL = connectedSQL
+    sqlHandler.cursorWeekly = cursor
+
+def evaluateData(sqlHandler, table, filename):
+    sqlFile = sqlHandler
     cursor = sqlFile.cursor()
     #connectionSQL = sqlite3.connect("moisture.db")
     #cursor = connectionSQL.cursor()
@@ -127,7 +162,7 @@ def evaluateData(sqlHandler):
                 _time,
                 _sensor,
                 _humidity
-               FROM moist;"""
+               FROM {};""".format(table)
     a = cursor.execute(query)
 
 
@@ -173,12 +208,12 @@ def evaluateData(sqlHandler):
     plt.title("Moisture", fontsize = 25)
     plt.xticks(rotation = 45)
     plt.tight_layout()
-    plt.savefig("Moisture.jpg")
+    plt.savefig("{}.jpg".format(filename))
     plt.close()
 
 
 
-def sendDataMail():
+def sendDataMail(filename):
     mail_content = '''Hello'''
     sender_address = 'moisture.sensorumea@gmail.com'
     sender_pass = '43A7BC_A'
@@ -191,7 +226,7 @@ def sendDataMail():
     # The subject line
     # The body and the attachments for the mail
     message.attach(MIMEText(mail_content, 'plain'))
-    attach_file_name = 'Moisture.jpg'
+    attach_file_name = '{}.jpg'.format(filename)
     #attach_file = open(attach_file_name, 'rb')  # Open the file as binary mode
     with open(attach_file_name, 'rb') as fp:
         payload = MIMEImage(fp.read())

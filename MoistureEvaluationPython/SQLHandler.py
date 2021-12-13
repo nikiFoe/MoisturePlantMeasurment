@@ -5,6 +5,7 @@ class SQLHandler:
 
     def __init__(self):
         self.connectionSQL, self.cursor  = self.loadSQL()
+        self.weeklySQL, self.cursorWeekly = self.loadWeeklySQL()
 
     def loadSQL(self):
         connectionSQL = sqlite3.connect("moisture.db")
@@ -43,3 +44,37 @@ class SQLHandler:
     def deleteTable(self):
         pass
 
+    def getWeeklySQL(self):
+        return self.weeklySQL
+
+    def setWeeklySQL(self, sqlInput):
+        self.weeklySQL = sqlInput
+
+    def safeWeeklySQL(self):
+        self.weeklySQL.commit()
+
+    def loadWeeklySQL(self):
+        weeklySQL = sqlite3.connect("weeklySQL.db")
+        weeklyCursor = weeklySQL.cursor()
+        self.weeklySQLTable(weeklyCursor)
+        return weeklySQL, weeklyCursor
+
+    def weeklySQLTable(self, cursor):
+        try:
+            sql_command = """
+                            CREATE TABLE weekly ( 
+                            _number INTEGER PRIMARY KEY,
+                            _time DATE,
+                            _sensor varchar(255), 
+                            _humidity INTEGER);"""
+
+            cursor.execute(sql_command)
+        except sqlite3.OperationalError:
+            sql_command = """DELETE FROM weekly"""
+            cursor.execute(sql_command)
+            print("Table already existing")
+
+    def copyData(self):
+        weeklySQL = self.loadWeeklySQL()
+        weeklySQLCursor = weeklySQL.cursor()
+        command = """INSERT INTO Destination SELECT * FROM Source;"""
