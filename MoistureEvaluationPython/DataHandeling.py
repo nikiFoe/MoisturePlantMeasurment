@@ -6,14 +6,11 @@ import smtplib
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email import encoders
 from socket import gethostbyname, gaierror
 import SQLHandler
+import re
 
-import numpy as np
 import pandas as pd
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import seaborn as sns
 import serial
@@ -55,16 +52,39 @@ def openSQL():
 def safeSQL(conSQL):
     conSQL.commit()
 
+def dataStringSplit(datastring):
+    splitPositions = re.finditer(datastring, ";")
+    dataDict = {}
+    lastIndex = 0
+    sensor = ""
+    value = ""
+    for i in range(len(splitPositions)):
+        if i < len(splitPositions):
+            data = datastring[lastIndex + 1:splitPositions[i]+1]
+            lastIndex = splitPositions[i]
+        elif i == len(splitPositions):
+            data = datastring[lastIndex+1:]
+        sensor, value = dataStringSplitColon(data)
+        dataDict[sensor] = value
+
+    return dataDict
+
+def dataStringSplitColon(dataString):
+    splitPosition = dataString.find(":")
+    sensor = dataString[:splitPosition-1]
+    value = dataString[splitPosition+1:]
+    return sensor, value
 
 def receivingDateLoop():
     #ser = serial.Serial('/dev/ttyACM0', 9600)
-    serialString = "COM5"
+    #serialString = "COM5"
+    serialString = '/dev/ttyACM0'
     serialNumber = 9600
     ser = serial.Serial(serialString, serialNumber)
     time.sleep(2)
     runningNumber = 0
     SQLHandlerObject = SQLHandler.SQLHandler()
-    schedule.every(2).minutes.do(scheduleTask, sqlHandler = SQLHandlerObject)
+    schedule.every(1).minutes.do(scheduleTask, sqlHandler = SQLHandlerObject)
     schedule.every(10).minutes.do(scheduleTaskWeekly, sqlHandler = SQLHandlerObject)
     connectionSQL = SQLHandlerObject.getSQL()
     cursor = connectionSQL.cursor()
@@ -74,32 +94,43 @@ def receivingDateLoop():
 
     #schedule.every(2).minutes.do(do_something, number = runningNumber, sql = connectionSQL)
 
-    runningNumber = runningNumber + 1
+    lastEntry = "SELECT LAST _number FROM moist;"
+    runningNumber = cursor.execute(lastEntry) + 1
+
+
+
+
     while True:
         try:
             line = ser.readline()  # read a byte
             if line:
-                times = datetime.now().strftime('%d-%H:%M')    #'%d.%m-%H:%M:%S')
+                times = datetime.now().strftime('%d-%H:%M:%S')    #'%d.%m-%H:%M:%S')
                 string = line.decode()  # convert the byte string to a unicode string
-                humidity = int(string[3:])  # convert the unicode string to an int
-                sensor = string[0:2]
+                #humidity = int(string[3:])  # convert the unicode string to an int
+                #sensor = string[0:2]
+                sensorDict = dataStringSplit(string)
+
+
                 format_str_v1 = """INSERT INTO moist """
                 format_str_v3 = """INSERT INTO weekly """
                 format_str_v2 = """(_number, _time, _sensor, _humidity) 
                                 VALUES ("{_number}", "{_time}", "{_sensor}","{_humidity}");"""
 
 
+                for each in list(sensorDict.keys()):
+                    sensor = each
+                    humidity = sensorDict.get(each)
 
-                sql_command = format_str_v2.format(_number = runningNumber,  _time = times, _sensor = sensor, _humidity = humidity)
+                    sql_command = format_str_v2.format(_number = runningNumber,  _time = times, _sensor = sensor, _humidity = humidity)
 
-                cursor.execute(format_str_v1 + sql_command)
-                weeklyCursor.execute(format_str_v3 + sql_command)
-                runningNumber = runningNumber + 1
+                    cursor.execute(format_str_v1 + sql_command)
+                    weeklyCursor.execute(format_str_v3 + sql_command)
+                    runningNumber = runningNumber + 1
 
 
                 #print(humidity)
                 if runningNumber%10 == 0:
-                    time.sleep(1)
+                    #time.sleep(1)
                     #safeSQL(connectionSQL)
                     SQLHandlerObject.setSQL(connectionSQL)
                     SQLHandlerObject.safeSQL()
@@ -175,9 +206,13 @@ def evaluateData(sqlHandler, table, filename):
     s1Index = []
     s2Index = []
     s3Index = []
+    s4Index = []
+    s5Index = []
     sx1Axes = []
     sx2Axes = []
     sx3Axes = []
+    sx4Axes = []
+    sx5Axes = []
 
     count = 0
     for count, item in enumerate(TM1['_sensor'].str.findall('s1'), start = 0):
@@ -197,12 +232,26 @@ def evaluateData(sqlHandler, table, filename):
             s3Index.append(TM1['_humidity'][count])
             sx3Axes.append(TM1['_time'][count])
 
+    count = 0
+    for count, item in enumerate(TM1['_sensor'].str.findall('s4'), start = 0):
+        if item:
+            s4Index.append(TM1['_humidity'][count])
+            sx4Axes.append(TM1['_time'][count])
+
+    count = 0
+    for count, item in enumerate(TM1['_sensor'].str.findall('s5'), start = 0):
+        if item:
+            s5Index.append(TM1['_humidity'][count])
+            sx5Axes.append(TM1['_time'][count])
+
     print(sx1Axes)
     print(s2Index)
     scatterplot = plt.scatter(sx1Axes[:len(s1Index)], s1Index)
     ax = plt.gca()
     plt.scatter(sx2Axes[:len(s2Index)], s2Index)
     plt.scatter(sx3Axes[:len(s3Index)], s3Index)
+    plt.scatter(sx4Axes[:len(s4Index)], s4Index)
+    plt.scatter(sx5Axes[:len(s5Index)], s5Index)
     #plt.scatter( TM1['_number'], TM1['_humidity'])
     plt.xlabel("Date", fontsize = 16)
     plt.ylabel("Moisture Value", fontsize = 16)
@@ -212,7 +261,7 @@ def evaluateData(sqlHandler, table, filename):
     plt.setp(ax.get_xticklabels()[::2], visible = False)
     plt.grid()
     ax.set_ylim([300, 500])
-    plt.legend(["s1", "s2", "s3"])
+    plt.legend(["s1", "s2", "s3", "s4", "s5"])
     plt.savefig("{}.jpg".format(filename))
     plt.close()
 
@@ -251,10 +300,10 @@ def sendDataMail(filename):
 
 
 if __name__ == "__main__":
-    #receivingDateLoop()
-    weeklySQL = sqlite3.connect("weeklySQL.db")
-    weeklyCursor = weeklySQL.cursor()
-    evaluateData(weeklySQL, "weekly", "weekly")
+    receivingDateLoop()
+    #weeklySQL = sqlite3.connect("weeklySQL.db")
+    #weeklyCursor = weeklySQL.cursor()
+    #evaluateData(weeklySQL, "weekly", "weekly")
 
 
 

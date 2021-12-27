@@ -25,8 +25,8 @@ class SQLHandler:
             cursor.execute(sql_command)
         except sqlite3.OperationalError:
             print("Table already existing")
-            sql_command = """DELETE FROM moist"""
-            cursor.execute(sql_command)
+            #sql_command = """DELETE FROM moist"""
+            #cursor.execute(sql_command)
 
 
     def safeSQL(self):
